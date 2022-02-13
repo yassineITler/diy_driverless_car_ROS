@@ -1,3 +1,4 @@
+
 Panels:
   - Class: rviz/Displays
     Help Height: 78
@@ -74,14 +75,14 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.009999999776482582
       Style: Flat Squares
-      Topic: /os1_cloud_node/points
+      Topic: /os_cloud_node_OS1_TOP/points
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
     - Class: rviz/Image
       Enabled: true
-      Image Topic: /openmv_cam/image/raw
+      Image Topic: /openmv_cam/image
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -106,7 +107,7 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-        os1_sensor:
+        os_sensor:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -211,11 +212,13 @@ Visualization Manager:
           Value: true
         map:
           Value: true
-        os1_imu:
+        os_imu:
           Value: false
-        os1_lidar:
+        os_lidar1:
           Value: false
-        os1_sensor:
+        os_lidar2:
+          Value: false          
+        os_sensor:
           Value: false
         scanmatcher_frame:
           Value: true
@@ -227,11 +230,13 @@ Visualization Manager:
       Tree:
         map:
           base_link:
-            os1_sensor:
-              os1_imu:
+            os_sensor:
+              os_imu:
                 {}
-              os1_lidar:
+              os_lidar1:
                 {}
+              os_lidar2:
+                {}                
           scanmatcher_frame:
             {}
       Update Interval: 0

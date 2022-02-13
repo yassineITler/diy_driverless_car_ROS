@@ -17,23 +17,47 @@
 
 <robot name="os_sensor">
 
+  <link name="base_link"> 
+    <visual> 
+      <origin rpy="0 0 3.14159" xyz="0 0 0"/> 
+      <material name="orange">
+        <color rgba="1.0 0.5 0.2 1" />
+      </material>
+      <geometry>
+        <mesh filename="package://rover_2dnav/meshes/Unnamed-Mercedes Benz Sprinter 519 CDI_step_AllCATPart.dae"/> 
+      </geometry> 
+    </visual>
+  </link>
+
   <material name="orange">
     <color rgba="1.0 0.5 0.2 1" />
   </material>
   <material name="gray">
     <color rgba="0.2 0.2 0.2 1" />
   </material>
-
   <link name="os_sensor" />
- 
-  <link name="base_link" />
+  <link name="os_sensor1" />
+  <link name="os_sensor2" />
 
   <joint name="sensor_link_joint" type="fixed">
     <parent link="base_link" />
     <child link="os_sensor" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
   </joint>
 
+  <joint name="sensor_link_joint1" type="fixed">
+    <parent link="base_link" />
+    <child link="os_sensor1" />
+    <origin xyz="1.12 -1.1 -0.475856" rpy="0.561937 0.75593 0.07367" />
+  </joint>
+  
+  <joint name="sensor_link_joint2" type="fixed">
+    <parent link="base_link" />
+    <child link="os_sensor2" />
+    <origin xyz="1.07831 0.970087 -0.39168" rpy="2.63308 2.39713 3.11967" />
+    
+    <!-- <origin xyz="1.12 1.1 -0.475856" rpy="-0.561937 0.75593 -0.07367" />    Start Values -->
+  </joint>
 <!-- Published by OS1 -->
 
 <link name="os_imu">
@@ -46,6 +70,16 @@
     </visual>
 </link>
 
+<link name="os_lidar">
+    <visual>
+      <origin xyz="0.0 0.0 0.0" />
+      <geometry>
+        <cylinder length="0.07" radius="0.05" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+</link>
+
 <link name="os_lidar1">
     <visual>
       <origin xyz="0.0 0.0 0.0" />
@@ -55,6 +89,7 @@
       <material name="gray" />
     </visual>
 </link>
+
 <link name="os_lidar2">
     <visual>
       <origin xyz="0.0 0.0 0.0" />
@@ -71,16 +106,22 @@
     <origin xyz="0.006253 -0.011775 0.007645" rpy="0 0 0" />
   </joint>
 
-  <joint name="os_link_joint1" type="fixed">
+  <joint name="os_link_joint" type="fixed">
     <parent link="os_sensor" />
+    <child link="os_lidar" />
+    <origin xyz="0.0 0.0 0.03618" rpy="0 0 3.14159" />
+  </joint>
+
+  <joint name="os_link_joint1" type="fixed">
+    <parent link="os_sensor1" />
     <child link="os_lidar1" />
     <origin xyz="0.0 0.0 0.03618" rpy="0 0 3.14159" />
   </joint>
 
   <joint name="os_link_joint2" type="fixed">
-    <parent link="os_sensor" />
+    <parent link="os_sensor2" />
     <child link="os_lidar2" />
-    <origin xyz="1.12 0.95 0.46" rpy="0.61086 0 3.14159" />
+    <origin xyz="0.0 0.0 0.03618" rpy="0 0 3.14159" />
   </joint>
 
 </robot>

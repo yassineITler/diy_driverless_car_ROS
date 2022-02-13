@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+
+<robot name="car"> 
+
+
+<link name="base_link"> 
+  <visual> 
+    <origin rpy="0 0 0" xyz="0 0 0"/> 
+    <material name="orange">
+      <color rgba="1.0 0.5 0.2 1" />
+    </material>
+    <geometry>
+       <mesh filename="package://rover_2dnav/meshes/Unnamed-Mercedes Benz Sprinter 519 CDI_step_AllCATPart.dae"/> 
+    </geometry> 
+  </visual>
+ </link>
+
+</robot>

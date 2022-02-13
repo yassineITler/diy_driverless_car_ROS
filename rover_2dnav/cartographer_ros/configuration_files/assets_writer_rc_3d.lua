@@ -22,7 +22,7 @@ VOXEL_SIZE = 5e-2
 include "transform.lua"
 
 options = {
-  tracking_frame = "os1_imu",
+  tracking_frame = "os_imu",
   pipeline = {
     {
       action = "min_max_range_filter",
@@ -63,11 +63,21 @@ options = {
     --
     -- We write xrays again. These now use geometry and the intensities to
     -- color pixels - they look quite similar, just a little lighter.
-   {
-     action = "intensity_to_color",
-     min_intensity = 0.,
-     max_intensity = 4095.,
-   },
+  --  {
+  --    action = "intensity_to_color",
+  --    min_intensity = 0.,
+  --    max_intensity = 13000.,
+  --  },
+  {
+    action = "color_points",
+    frame_id = "os_lidar1",
+    color = { 255., 0., 0. },
+  },
+  {
+    action = "color_points",
+    frame_id = "os_lidar2",
+    color = { 0., 255., 0. },
+  },
     {
       action = "write_xray_image",
       voxel_size = VOXEL_SIZE,
@@ -90,21 +100,21 @@ options = {
     -- We also write a PLY file at this stage, because gray points look good.
     -- The points in the PLY can be visualized using
     -- https://github.com/googlecartographer/point_cloud_viewer.
-    {
-      action = "write_ply",
-      filename = "points.ply",
-    },
-    {
-      action = "write_probability_grid",
-      draw_trajectories = true,
-      resolution = 0.05,
-      range_data_inserter = {
-        insert_free_space = true,
-        hit_probability = 0.55,
-        miss_probability = 0.49,
-      },
-      filename = "probability_grid",
-    },
+    -- {
+    --   action = "write_ply",
+    --   filename = "points.ply",
+    -- },
+    -- {
+    --   action = "write_probability_grid",
+    --   draw_trajectories = true,
+    --   resolution = 0.05,
+    --   range_data_inserter = {
+    --     insert_free_space = true,
+    --     hit_probability = 0.55,
+    --     miss_probability = 0.49,
+    --   },
+    --   filename = "probability_grid",
+    -- },
   }
 }
 
