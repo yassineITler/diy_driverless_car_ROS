@@ -1,59 +1,34 @@
 cmake_minimum_required(VERSION 3.1.0)
+project(ouster_client)
 
-# ==== Project Name ====
-project(ouster_client VERSION 0.3.0)
-set(ouster_client_VERSION_SUFFIX "")
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_FLAGS         "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG   "-O0 -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
-# ==== Requirements ====
-find_package(Eigen3 REQUIRED)
-find_package(jsoncpp REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(jsoncpp REQUIRED jsoncpp)
 
-# ==== Build Metadata Target ====
-add_custom_target(generate_build_header)
-add_custom_command(TARGET generate_build_header PRE_BUILD
-  COMMAND ${CMAKE_COMMAND} -DVERSION_GEN_OUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/include/ouster"
-                           -DVERSION_GEN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
-                           -DBUILD_TYPE="${CMAKE_BUILD_TYPE}"
-                           -DBUILD_SYSTEM="${CMAKE_SYSTEM_NAME}"
-                           -Douster_client_VERSION="${ouster_client_VERSION}"
-                           -Douster_client_VERSION_SUFFIX="${ouster_client_VERSION_SUFFIX}"
-  -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/VersionGen.cmake)
+if (DEFINED CATKIN_DEVEL_PREFIX)
+  find_package(catkin REQUIRED)
+  message(STATUS "Catkin env set, compiling ${PROJECT_NAME} with ROS")
 
-add_library(ouster_build INTERFACE)
-target_include_directories(ouster_build INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
-add_dependencies(ouster_build generate_build_header)
-
-# ==== Libraries ====
-add_library(ouster_client src/client.cpp src/types.cpp src/netcompat.cpp src/lidar_scan.cpp
-  src/image_processing.cpp src/buffered_udp_source.cpp src/parsing.cpp)
-target_link_libraries(ouster_client
-  PUBLIC Eigen3::Eigen $<BUILD_INTERFACE:ouster_build>
-  PRIVATE jsoncpp_lib)
-target_compile_definitions(ouster_client PRIVATE EIGEN_MPL2_ONLY)
-add_library(OusterSDK::ouster_client ALIAS ouster_client)
-
-if(WIN32)
-  target_link_libraries(ouster_client PUBLIC ws2_32)
+  catkin_package(
+    INCLUDE_DIRS include
+    LIBRARIES ouster_client
+    DEPENDS jsoncpp
+    CATKIN_DEPENDS
+  )
+else()
+  message(STATUS "Catkin env not set, compiling ${PROJECT_NAME} without ROS")
 endif()
-target_include_directories(ouster_client PUBLIC
-  $<INSTALL_INTERFACE:include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-target_include_directories(ouster_client SYSTEM PUBLIC
-  $<INSTALL_INTERFACE:include/optional-lite>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/optional-lite>)
 
-# ==== Executables ====
-add_executable(ouster_client_example src/example.cpp)
-target_link_libraries(ouster_client_example PRIVATE ouster_client ouster_build)
-add_executable(OusterSDK::ouster_client_example ALIAS ouster_client_example)
+add_library(ouster_client STATIC
+  src/os1.cpp
+  src/os1_util.cpp)
+target_link_libraries(ouster_client jsoncpp)
+target_include_directories(ouster_client PUBLIC include)
+target_include_directories(ouster_client SYSTEM PRIVATE ${jsoncpp_INCLUDE_DIRS})
 
-# ==== Install ====
-install(TARGETS ouster_client ouster_client_example
-        EXPORT ouster-sdk-targets
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-        INCLUDES DESTINATION include)
-
-install(DIRECTORY include/ouster include/optional-lite DESTINATION include)
+add_executable(ouster_client_example src/main.cpp)
+target_link_libraries(ouster_client_example ouster_client)

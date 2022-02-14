@@ -1,20 +1,11 @@
 /**
  * @file
- * @brief Example node to visualize range, near ir and signal images
+ * @brief Example node to visualize range, noise and intensity images
  *
- * Publishes ~/range_image, ~/nearir_image, and ~/signal_image.  Please bear
+ * Publishes ~/range_image, ~/noise_image, and ~/intensity_image.  Please bear
  * in mind that there is rounding/clamping to display 8 bit images. For computer
- * vision applications, use higher bit depth values in /os_cloud_node/points
+ * vision applications, use higher bit depth values in /os1_cloud_node/points
  */
-
-#include <pcl/conversions.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/image_encodings.h>
 
 #include <iomanip>
 #include <iostream>
@@ -23,171 +14,101 @@
 #include <thread>
 #include <vector>
 
-#include "ouster/client.h"
-#include "ouster/image_processing.h"
-#include "ouster/types.h"
-#include "ouster_ros/OSConfigSrv.h"
-#include "ouster_ros/ros.h"
+#include <pcl/conversions.h>
+#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl_ros/point_cloud.h>
 
-namespace sensor = ouster::sensor;
-namespace viz = ouster::viz;
+#include <ouster/os1.h>
+#include <ouster/os1_packet.h>
+#include <ouster/os1_util.h>
+#include <ouster_ros/OS1ConfigSrv.h>
+#include <ouster_ros/os1_ros.h>
+#include <ros/ros.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud2.h>
 
-using pixel_type = uint16_t;
-const size_t pixel_value_max = std::numeric_limits<pixel_type>::max();
-
-sensor_msgs::ImagePtr make_image_msg(size_t H, size_t W,
-                                     const ros::Time& stamp) {
-    sensor_msgs::ImagePtr msg{new sensor_msgs::Image{}};
-    msg->width = W;
-    msg->height = H;
-    msg->step = W * sizeof(pixel_type);
-    msg->encoding = sensor_msgs::image_encodings::MONO16;
-    msg->data.resize(W * H * sizeof(pixel_type));
-    msg->header.stamp = stamp;
-
-    return msg;
-}
+namespace OS1 = ouster::OS1;
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "img_node");
     ros::NodeHandle nh("~");
 
-    ouster_ros::OSConfigSrv cfg{};
-    auto client = nh.serviceClient<ouster_ros::OSConfigSrv>("os_config");
+    ouster_ros::OS1ConfigSrv cfg{};
+    auto client = nh.serviceClient<ouster_ros::OS1ConfigSrv>("os1_config");
     client.waitForExistence();
     if (!client.call(cfg)) {
-        ROS_ERROR("Calling os config service failed");
+        ROS_ERROR("Calling os1 config service failed");
         return EXIT_FAILURE;
     }
 
-    auto info = sensor::parse_metadata(cfg.response.metadata);
-    size_t H = info.format.pixels_per_column;
-    size_t W = info.format.columns_per_frame;
+    auto H = OS1::pixels_per_column;
+    auto W = OS1::n_cols_of_lidar_mode(
+        OS1::lidar_mode_of_string(cfg.response.lidar_mode));
 
-    auto udp_profile_lidar = info.format.udp_profile_lidar;
-    const int n_returns =
-        (udp_profile_lidar == sensor::UDPProfileLidar::PROFILE_LIDAR_LEGACY)
-            ? 1
-            : 2;
+    const auto px_offset = ouster::OS1::get_px_offset(W);
 
-    const auto& px_offset = info.format.pixel_shift_by_row;
+    ros::Publisher range_image_pub =
+        nh.advertise<sensor_msgs::Image>("range_image", 100);
+    ros::Publisher noise_image_pub =
+        nh.advertise<sensor_msgs::Image>("noise_image", 100);
+    ros::Publisher intensity_image_pub =
+        nh.advertise<sensor_msgs::Image>("intensity_image", 100);
 
-    std::vector<ros::Publisher> img_pubs;
-    std::vector<viz::AutoExposure> aes;
+    ouster_ros::OS1::CloudOS1 cloud{};
 
-    ros::Publisher nearir_image_pub =
-        nh.advertise<sensor_msgs::Image>("nearir_image", 100);
-
-    std::vector<ros::Publisher> range_image_pubs;
-    std::vector<ros::Publisher> signal_image_pubs;
-    std::vector<ros::Publisher> reflec_image_pubs;
-
-    auto topic = [](auto base, int ind) {
-        if (ind == 0) return std::string(base);
-        return std::string(base) +
-               std::to_string(ind + 1);  // need second return to return 2
-    };
-    for (int i = 0; i < n_returns; i++) {
-        ros::Publisher range_image_pub =
-            nh.advertise<sensor_msgs::Image>(topic("range_image", i), 100);
-        range_image_pubs.push_back(range_image_pub);
-
-        ros::Publisher signal_image_pub =
-            nh.advertise<sensor_msgs::Image>(topic("signal_image", i), 100);
-        signal_image_pubs.push_back(signal_image_pub);
-
-        ros::Publisher reflec_image_pub =
-            nh.advertise<sensor_msgs::Image>(topic("reflec_image", i), 100);
-        reflec_image_pubs.push_back(reflec_image_pub);
-    }
-
-    ouster_ros::Cloud cloud{};
-
-    viz::AutoExposure nearir_ae, signal_ae, reflec_ae;
-    viz::BeamUniformityCorrector nearir_buc;
-
-    sensor_msgs::ImagePtr nearir_image;
-
-    auto base_cloud_handler = [&](const sensor_msgs::PointCloud2::ConstPtr& m,
-                                  int return_index) {
+    auto cloud_handler = [&](const sensor_msgs::PointCloud2::ConstPtr& m) {
         pcl::fromROSMsg(*m, cloud);
 
-        auto range_image = make_image_msg(H, W, m->header.stamp);
-        auto signal_image = make_image_msg(H, W, m->header.stamp);
-        auto reflec_image = make_image_msg(H, W, m->header.stamp);
-        nearir_image = make_image_msg(H, W, m->header.stamp);
+        sensor_msgs::Image range_image;
+        sensor_msgs::Image noise_image;
+        sensor_msgs::Image intensity_image;
 
-        ouster::img_t<double> nearir_image_eigen(H, W);
-        ouster::img_t<double> signal_image_eigen(H, W);
-        ouster::img_t<double> reflec_image_eigen(H, W);
+        range_image.width = W;
+        range_image.height = H;
+        range_image.step = W;
+        range_image.encoding = "mono8";
+        range_image.data.resize(W * H);
+        range_image.header.stamp = m->header.stamp;
 
-        // views into message data
-        auto range_image_map = Eigen::Map<ouster::img_t<pixel_type>>(
-            (pixel_type*)range_image->data.data(), H, W);
-        auto signal_image_map = Eigen::Map<ouster::img_t<pixel_type>>(
-            (pixel_type*)signal_image->data.data(), H, W);
-        auto reflec_image_map = Eigen::Map<ouster::img_t<pixel_type>>(
-            (pixel_type*)reflec_image->data.data(), H, W);
-        auto nearir_image_map = Eigen::Map<ouster::img_t<pixel_type>>(
-            (pixel_type*)nearir_image->data.data(), H, W);
+        noise_image.width = W;
+        noise_image.height = H;
+        noise_image.step = W;
+        noise_image.encoding = "mono8";
+        noise_image.data.resize(W * H);
+        noise_image.header.stamp = m->header.stamp;
 
-        // copy data out of Cloud message, with destaggering
-        for (size_t u = 0; u < H; u++) {
-            for (size_t v = 0; v < W; v++) {
-                const size_t vv = (v + W - px_offset[u]) % W;
-                const auto& pt = cloud[u * W + vv];
+        intensity_image.width = W;
+        intensity_image.height = H;
+        intensity_image.step = W;
+        intensity_image.encoding = "mono8";
+        intensity_image.data.resize(W * H);
+        intensity_image.header.stamp = m->header.stamp;
 
-                // 16 bit img: use 4mm resolution and throw out returns >
-                // 260m
-                auto r = (pt.range + 0b10) >> 2;
-                range_image_map(u, v) = r > pixel_value_max ? 0 : r;
+        for (int u = 0; u < H; u++) {
+            for (int v = 0; v < W; v++) {
+                const size_t vv = (v + px_offset[u]) % W;
+                const size_t index = vv * H + u;
+                const auto& pt = cloud[index];
 
-                signal_image_eigen(u, v) = pt.intensity;
-                reflec_image_eigen(u, v) = pt.reflectivity;
-                nearir_image_eigen(u, v) = pt.ambient;
+                if (pt.range == 0) {
+                    range_image.data[u * W + v] = 0;
+                } else {
+                    range_image.data[u * W + v] =
+                        255 - std::min(std::round(pt.range * 5e-3), 255.0);
+                }
+                noise_image.data[u * W + v] = std::min(pt.noise, (uint16_t)255);
+                intensity_image.data[u * W + v] = std::min(pt.intensity, 255.f);
             }
         }
 
-        const bool first = (return_index == 0);
-
-        signal_ae(signal_image_eigen, first);
-        reflec_ae(reflec_image_eigen, first);
-        nearir_buc(nearir_image_eigen);
-        nearir_ae(nearir_image_eigen, first);
-        nearir_image_eigen = nearir_image_eigen.sqrt();
-        signal_image_eigen = signal_image_eigen.sqrt();
-
-        // copy data into image messages
-        signal_image_map =
-            (signal_image_eigen * pixel_value_max).cast<pixel_type>();
-        reflec_image_map =
-            (reflec_image_eigen * pixel_value_max).cast<pixel_type>();
-        if (first)
-            nearir_image_map =
-                (nearir_image_eigen * pixel_value_max).cast<pixel_type>();
-
-        // publish at return index
-        range_image_pubs[return_index].publish(range_image);
-        signal_image_pubs[return_index].publish(signal_image);
-        reflec_image_pubs[return_index].publish(reflec_image);
+        range_image_pub.publish(range_image);
+        noise_image_pub.publish(noise_image);
+        intensity_image_pub.publish(intensity_image);
     };
 
-    auto first_cloud_handler =
-        [&](const sensor_msgs::PointCloud2::ConstPtr& m) {
-            base_cloud_handler(m, 0);
-            nearir_image_pub.publish(nearir_image);
-        };
-
-    auto second_cloud_handler =
-        [&](const sensor_msgs::PointCloud2::ConstPtr& m) {
-            base_cloud_handler(m, 1);
-        };
-
-    // image processing
-    auto pc1_sub = nh.subscribe<sensor_msgs::PointCloud2>(
-        topic("points", 0), 100, first_cloud_handler);
-    auto pc2_sub = nh.subscribe<sensor_msgs::PointCloud2>(
-        topic("points", 1), 100, second_cloud_handler);
+    auto pc_sub =
+        nh.subscribe<sensor_msgs::PointCloud2>("points", 500, cloud_handler);
 
     ros::spin();
     return EXIT_SUCCESS;
