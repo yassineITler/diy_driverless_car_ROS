@@ -4,7 +4,7 @@ Ouster Example Code
 
 :Description: Sample code provided for working with Ouster sensors
 
-Folder: 
+Folders: 
         * /ouster_client
         * /ouster_pcap
         * /ouster_ros  
