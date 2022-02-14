@@ -4,6 +4,13 @@ Ouster Example Code
 
 :Description: Sample code provided for working with Ouster sensors
 
+Folder: /ouster_client
+        /ouster_pcap
+        /ouster_ros
+        /ouster_viz
+        /cmake
+        /python
+        /tests
 .. contents:: Contents:
    :local:
 
